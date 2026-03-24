@@ -110,7 +110,7 @@ You can create a symlink inside your project directory to jump directly to that 
 ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./.claude/conversation-logs
 ```
 
-After this, `.claude/conversation-logs/` in your project will point to all saved sessions for that project.
+After this, `.claude/conversation-logs/` in your project will point to all saved sessions for that project. Feel free to change the symlink path to wherever you prefer — only the link location matters, not the name.
 
 > **Note:** Add the symlink to `.gitignore` to avoid committing it. The target path (`~/.claude/conversation-logs/`) is local to each machine, so the link will be broken on other people's environments.
 >
