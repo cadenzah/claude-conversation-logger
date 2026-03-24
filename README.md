@@ -29,11 +29,13 @@ Every time Claude finishes responding, the current session is written to disk â€
 
 ## Installation
 
-**1. Clone the repository** to a permanent location:
+**1. Run the install script:**
 
 ```bash
-git clone https://github.com/cadenzah/claude-conversation-logger ~/.claude/plugins/conversation-logger
+bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
 ```
+
+This clones the repository to `~/.claude/plugins/conversation-logger`. Running the same command again will update the plugin to the latest version.
 
 **2. Add the Stop hook** to your `~/.claude/settings.json`:
 
@@ -58,6 +60,14 @@ git clone https://github.com/cadenzah/claude-conversation-logger ~/.claude/plugi
 If you already have other hooks under `Stop`, add this entry to the existing array.
 
 The plugin activates on the next Claude Code session.
+
+## Updating
+
+Run the same install script to pull the latest changes:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
+```
 
 ## Log format
 
