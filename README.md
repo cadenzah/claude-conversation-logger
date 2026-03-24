@@ -95,15 +95,21 @@ Stop hooks are configured in `~/.claude/settings.json` under the `"hooks"` key..
 You can create a symlink inside your project directory to jump directly to that project's conversation logs:
 
 ```bash
-ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./conversation-logs
+ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./.claude/conversation-logs
 ```
 
-After this, `./conversation-logs/` in your project will point to all saved sessions for that project.
+After this, `.claude/conversation-logs/` in your project will point to all saved sessions for that project.
 
-> **Note:** Add the symlink name to `.gitignore` to avoid committing it. The target path (`~/.claude/conversation-logs/`) is local to each machine, so the link will be broken on other people's environments.
+> **Note:** Add the symlink to `.gitignore` to avoid committing it. The target path (`~/.claude/conversation-logs/`) is local to each machine, so the link will be broken on other people's environments.
 >
 > ```bash
-> echo "conversation-logs" >> .gitignore
+> echo ".claude/conversation-logs" >> .gitignore
+> ```
+>
+> To remove the symlink, simply delete it — the actual log files will not be affected:
+>
+> ```bash
+> rm ./.claude/conversation-logs
 > ```
 
 ## How it works
