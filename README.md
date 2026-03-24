@@ -1,6 +1,6 @@
 # claude-conversation-logger
 
-**[한국어](README.ko.md)**
+**English** | [한국어](README.ko.md)
 
 A Claude Code plugin that automatically saves every session as a human-readable Markdown file.
 

@@ -1,6 +1,6 @@
 # claude-conversation-logger
 
-**[English](README.md)**
+[English](README.md) | **한국어**
 
 Claude Code 세션을 자동으로 읽기 좋은 마크다운 파일로 저장하는 플러그인입니다.
 
