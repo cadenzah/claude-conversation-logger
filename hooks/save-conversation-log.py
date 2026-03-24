@@ -152,6 +152,22 @@ def get_date_prefix(transcript_path):
     return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 
+def _wait_for_stable_transcript(transcript_path, stable_secs=1, max_wait=10):
+    """Wait until the transcript file size stops changing."""
+    prev_size = -1
+    waited = 0
+    while waited < max_wait:
+        try:
+            size = os.path.getsize(transcript_path)
+        except Exception:
+            return
+        if size == prev_size:
+            return
+        prev_size = size
+        time.sleep(stable_secs)
+        waited += stable_secs
+
+
 def main():
     try:
         hook_data = json.loads(sys.stdin.read())
@@ -165,7 +181,7 @@ def main():
     if not transcript_path or not os.path.exists(transcript_path):
         sys.exit(0)
 
-    time.sleep(1)
+    _wait_for_stable_transcript(transcript_path)
 
     project_name = os.path.basename(cwd) if cwd else 'unknown'
     logs_dir = os.path.join(
