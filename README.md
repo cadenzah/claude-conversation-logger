@@ -24,11 +24,35 @@ Every time Claude finishes responding, the current session is written to disk â€
 
 ## Installation
 
+**1. Clone the repository** to a permanent location:
+
 ```bash
-claude plugin install https://github.com/cadenzah/claude-conversation-logger
+git clone https://github.com/cadenzah/claude-conversation-logger ~/.claude/plugins/conversation-logger
 ```
 
-That's it. The plugin activates on the next Claude Code session.
+**2. Add the Stop hook** to your `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/plugins/conversation-logger/hooks/save-conversation-log.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If you already have other hooks under `Stop`, add this entry to the existing array.
+
+The plugin activates on the next Claude Code session.
 
 ## Log format
 
