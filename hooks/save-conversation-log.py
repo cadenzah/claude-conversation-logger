@@ -11,6 +11,7 @@ import json
 import re
 import sys
 import os
+import time
 from datetime import datetime
 
 
@@ -163,6 +164,8 @@ def main():
 
     if not transcript_path or not os.path.exists(transcript_path):
         sys.exit(0)
+
+    time.sleep(1)
 
     project_name = os.path.basename(cwd) if cwd else 'unknown'
     logs_dir = os.path.join(
