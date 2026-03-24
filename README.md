@@ -70,6 +70,12 @@ Stop hooks are configured in `~/.claude/settings.json` under the `"hooks"` key..
 
 The plugin registers a `Stop` hook that fires whenever Claude finishes a response. The hook receives the path to the current session's JSONL transcript, parses it, and writes a Markdown file. Because the file is overwritten on each trigger, you always have an up-to-date snapshot — even mid-session.
 
+## Contributing
+
+Contributions are welcome! Feel free to open issues for bug reports or feature requests, and pull requests are always appreciated.
+
+If you have ideas for improvements — new output formats, filtering options, better metadata, or anything else — don't hesitate to jump in.
+
 ## License
 
 MIT
