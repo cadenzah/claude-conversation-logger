@@ -1,4 +1,4 @@
-# conversation-logger
+# claude-conversation-logger
 
 A Claude Code plugin that automatically saves every session as a human-readable Markdown file.
 
@@ -25,7 +25,7 @@ Every time Claude finishes responding, the current session is written to disk â€
 ## Installation
 
 ```bash
-claude plugin install https://github.com/cadenzah/conversation-logger
+claude plugin install https://github.com/cadenzah/claude-conversation-logger
 ```
 
 That's it. The plugin activates on the next Claude Code session.
