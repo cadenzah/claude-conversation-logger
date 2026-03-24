@@ -1,5 +1,7 @@
 # claude-conversation-logger
 
+**[한국어](README.ko.md)**
+
 A Claude Code plugin that automatically saves every session as a human-readable Markdown file.
 
 Every time Claude finishes responding, the current session is written to disk — so nothing is lost to context compression, and you can review past conversations any time.
