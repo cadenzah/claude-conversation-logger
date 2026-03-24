@@ -1,0 +1,16 @@
+{
+  "description": "Save each Claude Code session as a Markdown conversation log after every response.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/save-conversation-log.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

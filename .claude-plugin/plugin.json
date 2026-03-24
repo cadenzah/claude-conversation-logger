@@ -1,0 +1,8 @@
+{
+  "name": "conversation-logger",
+  "description": "Automatically saves every Claude Code session as a human-readable Markdown file. Logs are organized by project under ~/.claude/conversation-logs/, with timestamps in filenames and extended thinking included as collapsible blocks.",
+  "author": {
+    "name": "Cadenzah",
+    "url": "https://github.com/cadenzah"
+  }
+}
