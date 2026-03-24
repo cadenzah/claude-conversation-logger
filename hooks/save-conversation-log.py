@@ -7,6 +7,7 @@ Logs are written to: ~/.claude/conversation-logs/{project-name}/{YYYY-MM-DD_HH-M
 Each session maps to one file; the file is overwritten on every trigger to keep it up to date.
 """
 
+import difflib
 import json
 import re
 import sys
@@ -41,8 +42,22 @@ def extract_content(content):
         elif t == 'tool_use':
             name = item.get('name', 'tool')
             input_data = item.get('input', {})
-            input_str = json.dumps(input_data, ensure_ascii=False, indent=2)
-            text_parts.append(f"**[Tool: {name}]**\n```json\n{input_str}\n```")
+            if name == 'Edit':
+                file_path = input_data.get('file_path', '')
+                old_str = input_data.get('old_string', '')
+                new_str = input_data.get('new_string', '')
+                old_lines = (old_str + '\n').splitlines(keepends=True)
+                new_lines = (new_str + '\n').splitlines(keepends=True)
+                diff = difflib.unified_diff(
+                    old_lines, new_lines,
+                    fromfile=file_path, tofile=file_path,
+                    lineterm=''
+                )
+                diff_content = '\n'.join(diff)
+                text_parts.append(f"**[Tool: {name}]** `{file_path}`\n```diff\n{diff_content}\n```")
+            else:
+                input_str = json.dumps(input_data, ensure_ascii=False, indent=2)
+                text_parts.append(f"**[Tool: {name}]**\n```json\n{input_str}\n```")
         elif t == 'tool_result':
             result_content = item.get('content', '')
             if isinstance(result_content, list):
