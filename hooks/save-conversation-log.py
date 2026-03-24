@@ -39,11 +39,24 @@ def extract_content(content):
         elif t == 'thinking':
             thinking_parts.append(item.get('thinking', ''))
         elif t == 'tool_use':
-            text_parts.append(f"[Tool: {item.get('name', 'tool')}]")
-        # tool_result is intentionally omitted
+            name = item.get('name', 'tool')
+            input_data = item.get('input', {})
+            input_str = json.dumps(input_data, ensure_ascii=False, indent=2)
+            text_parts.append(f"**[Tool: {name}]**\n```json\n{input_str}\n```")
+        elif t == 'tool_result':
+            result_content = item.get('content', '')
+            if isinstance(result_content, list):
+                result_text = '\n'.join(
+                    c.get('text', '') for c in result_content
+                    if isinstance(c, dict) and c.get('type') == 'text'
+                )
+            else:
+                result_text = str(result_content) if result_content else ''
+            if result_text.strip():
+                text_parts.append(result_text)
 
     thinking = '\n\n'.join(p for p in thinking_parts if p.strip()) or None
-    text = '\n'.join(p for p in text_parts if p.strip())
+    text = '\n\n'.join(p for p in text_parts if p.strip())
     return thinking, text
 
 
@@ -103,15 +116,28 @@ def jsonl_to_markdown(transcript_path, session_id, cwd):
         thinking, text = extract_content(content)
 
         if role == 'user':
-            # Strip internal system tags injected by Claude Code
-            if '<system-reminder>' in text or '<ide_' in text:
-                text = re.sub(r'<[^>]+>.*?</[^>]+>', '', text, flags=re.DOTALL).strip()
-            if not text.strip():
-                continue
-            md.append(f'## User `{timestamp}`')
-            md.append('')
-            md.append(text.strip())
-            md.append('')
+            is_tool_result_only = (
+                isinstance(content, list) and len(content) > 0 and
+                all(isinstance(i, dict) and i.get('type') == 'tool_result'
+                    for i in content if isinstance(i, dict))
+            )
+            if is_tool_result_only:
+                if not text.strip():
+                    continue
+                md.append(f'## Tool Output `{timestamp}`')
+                md.append('')
+                md.append(text.strip())
+                md.append('')
+            else:
+                # Strip internal system tags injected by Claude Code
+                if '<system-reminder>' in text or '<ide_' in text:
+                    text = re.sub(r'<[^>]+>.*?</[^>]+>', '', text, flags=re.DOTALL).strip()
+                if not text.strip():
+                    continue
+                md.append(f'## User `{timestamp}`')
+                md.append('')
+                md.append(text.strip())
+                md.append('')
 
         elif role == 'assistant':
             if not text.strip() and not thinking:
