@@ -22,6 +22,11 @@ Every time Claude finishes responding, the current session is written to disk â€
     2026-03-20_17-30-00_308b6c72.md
 ```
 
+## Requirements
+
+- Python 3 (available on the system `PATH`)
+- Claude Code 2.x or later
+
 ## Installation
 
 **1. Clone the repository** to a permanent location:
@@ -85,10 +90,21 @@ The user is asking about Stop hooks...
 Stop hooks are configured in `~/.claude/settings.json` under the `"hooks"` key...
 ```
 
-## Requirements
+## Quick access to logs from your project
 
-- Python 3 (available on the system `PATH`)
-- Claude Code 2.x or later
+You can create a symlink inside your project directory to jump directly to that project's conversation logs:
+
+```bash
+ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./conversation-logs
+```
+
+After this, `./conversation-logs/` in your project will point to all saved sessions for that project.
+
+> **Note:** Add the symlink name to `.gitignore` to avoid committing it. The target path (`~/.claude/conversation-logs/`) is local to each machine, so the link will be broken on other people's environments.
+>
+> ```bash
+> echo "conversation-logs" >> .gitignore
+> ```
 
 ## How it works
 
