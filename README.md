@@ -1,5 +1,7 @@
 # claude-conversation-logger
 
+**English** | [한국어](README.ko.md)
+
 A Claude Code plugin that automatically saves every session as a human-readable Markdown file.
 
 Every time Claude finishes responding, the current session is written to disk — so nothing is lost to context compression, and you can review past conversations any time.
@@ -22,13 +24,20 @@ Every time Claude finishes responding, the current session is written to disk �
     2026-03-20_17-30-00_308b6c72.md
 ```
 
+## Requirements
+
+- Python 3 (available on the system `PATH`)
+- Claude Code 2.x or later
+
 ## Installation
 
-**1. Clone the repository** to a permanent location:
+**1. Run the install script:**
 
 ```bash
-git clone https://github.com/cadenzah/claude-conversation-logger ~/.claude/plugins/conversation-logger
+bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
 ```
+
+This clones the repository to `~/.claude/plugins/conversation-logger`. Running the same command again will update the plugin to the latest version.
 
 **2. Add the Stop hook** to your `~/.claude/settings.json`:
 
@@ -53,6 +62,14 @@ git clone https://github.com/cadenzah/claude-conversation-logger ~/.claude/plugi
 If you already have other hooks under `Stop`, add this entry to the existing array.
 
 The plugin activates on the next Claude Code session.
+
+## Updating
+
+Run the same install script to pull the latest changes:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
+```
 
 ## Log format
 
@@ -85,10 +102,27 @@ The user is asking about Stop hooks...
 Stop hooks are configured in `~/.claude/settings.json` under the `"hooks"` key...
 ```
 
-## Requirements
+## Quick access to logs from your project
 
-- Python 3 (available on the system `PATH`)
-- Claude Code 2.x or later
+You can create a symlink inside your project directory to jump directly to that project's conversation logs:
+
+```bash
+ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./.claude/conversation-logs
+```
+
+After this, `.claude/conversation-logs/` in your project will point to all saved sessions for that project. Feel free to change the symlink path to wherever you prefer — only the link location matters, not the name.
+
+> **Note:** Add the symlink to `.gitignore` to avoid committing it. The target path (`~/.claude/conversation-logs/`) is local to each machine, so the link will be broken on other people's environments.
+>
+> ```bash
+> echo ".claude/conversation-logs" >> .gitignore
+> ```
+>
+> To remove the symlink, simply delete it — the actual log files will not be affected:
+>
+> ```bash
+> rm ./.claude/conversation-logs
+> ```
 
 ## How it works
 
