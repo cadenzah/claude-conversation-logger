@@ -10,18 +10,20 @@ Every time Claude finishes responding, the current session is written to disk â€
 
 - Saves each session as a `.md` file after every Claude response
 - Organizes logs by project name in subdirectories
-- Filenames include the session start time for easy browsing
+- Filenames include the session start time and a human-readable title for easy browsing
 - Extended thinking (`<details>` blocks) is preserved as collapsible sections
 - Internal system tags are stripped; only the real conversation is kept
+
+The title in the filename is taken from Claude Code's AI-generated session title when available, and falls back to the first meaningful user message otherwise.
 
 **Log location:**
 ```
 ~/.claude/conversation-logs/
   my-project/
-    2026-03-24_13-04-37_0024fc91.md
-    2026-03-23_09-11-02_fe5d4af5.md
+    2026-03-24_13-04-37_0024fc91_how-to-set-up-a-stop-hook.md
+    2026-03-23_09-11-02_fe5d4af5_refactor-auth-middleware.md
   another-project/
-    2026-03-20_17-30-00_308b6c72.md
+    2026-03-20_17-30-00_308b6c72_initial-project-setup.md
 ```
 
 ## Requirements
