@@ -14,7 +14,9 @@ Claude Code도 `~/.claude/projects/`에 JSONL 원본 트랜스크립트를 남�
 - 프로젝트별 하위 디렉토리로 정리 — 하위 디렉토리나 git worktree에서 시작한 세션도 메인 저장소 폴더로 모음
 - 파일명에 세션 시작 시각과 사람이 읽기 좋은 제목 포함
 - Extended thinking(`<details>` 블록)을 접을 수 있는 섹션으로 보존
-- Claude Code 내부 시스템 태그는 제거하고 실제 대화만 저장
+- Claude Code 내부 시스템 태그는 제거하고, 슬래시 커맨드는 `/command args` 형태로 표시
+- Claude Code가 주입한 컨텍스트(스킬 지침, 컨텍스트 압축 요약, 재개 프롬프트)와 rewind로 버려진 분기는 접을 수 있는 섹션으로 보존해, 본문은 실제로 나눈 대화 흐름대로 읽힘
+- 서브에이전트(sidechain) 메시지는 제외
 
 파일명의 제목은 Claude Code가 AI로 생성한 세션 제목을 우선 사용하며, 없을 경우 첫 번째 유의미한 사용자 메시지로 대체됩니다.
 

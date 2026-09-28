@@ -14,7 +14,9 @@ Claude Code already keeps raw JSONL transcripts under `~/.claude/projects/`, but
 - Organizes logs by project in subdirectories — sessions started in a subdirectory or a git worktree are filed under the main repository
 - Filenames include the session start time and a human-readable title for easy browsing
 - Extended thinking (`<details>` blocks) is preserved as collapsible sections
-- Internal system tags are stripped; only the real conversation is kept
+- Internal system tags are stripped; slash commands are shown as `/command args`
+- Context Claude Code injects (skill instructions, compaction summaries, resume prompts) and branches abandoned by a rewind are kept in collapsible sections, so the main flow reads like the conversation you actually had
+- Subagent sidechain messages are excluded
 
 The title in the filename is taken from Claude Code's AI-generated session title when available, and falls back to the first meaningful user message otherwise.
 

@@ -14,6 +14,7 @@ Environment variables:
 
 import difflib
 import hashlib
+import html
 import json
 import re
 import subprocess
@@ -196,7 +197,11 @@ def entries_to_markdown(entries, session_id, cwd, project_root=None, last_assist
     Returns:
         (markdown: str | None, error: str | None)
     """
-    messages = [e for e in entries if e.get('type') in ('user', 'assistant')]
+    # Sidechain entries belong to subagents, not the main conversation
+    messages = [
+        e for e in entries
+        if e.get('type') in ('user', 'assistant') and not e.get('isSidechain')
+    ]
     if not messages:
         return None, 'no messages'
 
@@ -228,45 +233,30 @@ def entries_to_markdown(entries, session_id, cwd, project_root=None, last_assist
     md.append('---')
     md.append('')
 
+    abandoned = _find_rewound_uuids(entries)
+    branch = []  # rendered lines of the current run of rewound messages
+    branch_count = 0
+
+    def flush_branch():
+        nonlocal branch, branch_count
+        if branch:
+            md.extend(_details(
+                f'Rewound branch ({branch_count} messages, not part of the final conversation)',
+                branch,
+            ))
+            branch, branch_count = [], 0
+
     for msg in messages:
-        role = msg.get('type', '')
-        timestamp = format_timestamp(msg.get('timestamp', ''))
-        content = msg.get('message', {}).get('content', '')
-        thinking, text = extract_content(content)
-
-        if role == 'user':
-            if _is_tool_result_only(content):
-                if not text.strip():
-                    continue
-                md.append(f'## Tool Output `{timestamp}`')
-                md.append('')
-                md.append(text.strip())
-                md.append('')
-            else:
-                text = clean_user_text(text)
-                if not text:
-                    continue
-                md.append(f'## User `{timestamp}`')
-                md.append('')
-                md.append(text.strip())
-                md.append('')
-
-        elif role == 'assistant':
-            if not text.strip() and not thinking:
-                continue
-            md.append(f'## Claude `{timestamp}`')
-            md.append('')
-            if thinking:
-                md.append('<details>')
-                md.append('<summary>Thinking</summary>')
-                md.append('')
-                md.append(thinking.strip())
-                md.append('')
-                md.append('</details>')
-                md.append('')
-            if text.strip():
-                md.append(text.strip())
-            md.append('')
+        lines = _render_message(msg)
+        if not lines:
+            continue
+        if msg.get('uuid') in abandoned:
+            branch.extend(lines)
+            branch_count += 1
+        else:
+            flush_branch()
+            md.extend(lines)
+    flush_branch()
 
     if pending_reply:
         md.append(f'## Claude `{format_timestamp(last_ts)}`')
@@ -278,6 +268,102 @@ def entries_to_markdown(entries, session_id, cwd, project_root=None, last_assist
     if REDACT_ENABLED:
         markdown = redact_secrets(markdown)
     return markdown, None
+
+
+def _details(summary, body_lines):
+    """Wrap Markdown lines in a collapsible <details> block."""
+    return ['<details>', f'<summary>{html.escape(summary)}</summary>', ''] + body_lines + ['</details>', '']
+
+
+def _first_line(text, limit=80):
+    skill = re.match(r'Base directory for this skill:\s*(\S+)', text)
+    if skill:
+        return 'Skill: ' + os.path.basename(skill.group(1).rstrip('/'))
+    for line in text.splitlines():
+        line = line.strip().lstrip('#').strip()
+        if line:
+            return line if len(line) <= limit else line[:limit].rstrip() + '…'
+    return ''
+
+
+def _render_message(msg):
+    """Return the Markdown lines for one transcript message (empty to skip)."""
+    role = msg.get('type', '')
+    timestamp = format_timestamp(msg.get('timestamp', ''))
+    content = msg.get('message', {}).get('content', '')
+    thinking, text = extract_content(content)
+
+    if role == 'user':
+        if _is_tool_result_only(content):
+            if not text.strip():
+                return []
+            return [f'## Tool Output `{timestamp}`', '', text.strip(), '']
+
+        text = clean_user_text(text)
+        if not text:
+            return []
+        if msg.get('isCompactSummary'):
+            # Summary Claude Code wrote when the context was compacted
+            return [f'## Context Compacted `{timestamp}`', ''] + _details(
+                'Summary of the earlier conversation given to Claude', [text, '']
+            )
+        if msg.get('isMeta'):
+            # Injected by Claude Code (skill instructions, resume prompts,
+            # image metadata, messages from other sessions), not typed by the user
+            return _details(f'Context `{timestamp}`: {_first_line(text)}', [text, ''])
+        return [f'## User `{timestamp}`', '', text, '']
+
+    if role == 'assistant':
+        if not text.strip() and not thinking:
+            return []
+        lines = [f'## Claude `{timestamp}`', '']
+        if thinking:
+            lines += _details('Thinking', [thinking.strip(), ''])
+        if text.strip():
+            lines.append(text.strip())
+        lines.append('')
+        return lines
+
+    return []
+
+
+def _is_real_prompt(entry):
+    """True for a prompt the user typed (not tool results or injected context)."""
+    if entry.get('type') != 'user' or entry.get('isMeta') or entry.get('isCompactSummary'):
+        return False
+    content = entry.get('message', {}).get('content', '')
+    if isinstance(content, str):
+        return bool(content.strip())
+    return isinstance(content, list) and any(
+        isinstance(i, dict) and i.get('type') == 'text' for i in content
+    )
+
+
+def _find_rewound_uuids(entries):
+    """Return uuids of messages on branches abandoned by a rewind.
+
+    Rewinding and re-prompting attaches the new prompt to the same parent as
+    the prompt it replaces, so a parent with several user-prompt children marks
+    a rewind; every earlier sibling's subtree was abandoned. Other forks in the
+    tree (e.g. parallel tool calls) are left alone.
+    """
+    children = {}
+    for entry in entries:
+        if entry.get('uuid') and entry.get('parentUuid'):
+            children.setdefault(entry['parentUuid'], []).append(entry)
+
+    abandoned = set()
+    for siblings in children.values():
+        prompts = [e for e in siblings if _is_real_prompt(e)]
+        for root in prompts[:-1]:
+            stack = [root]
+            while stack:
+                node = stack.pop()
+                if node['uuid'] in abandoned:
+                    continue
+                abandoned.add(node['uuid'])
+                stack.extend(children.get(node['uuid'], []))
+    return abandoned
 
 
 def _is_tool_result_only(content):
@@ -381,6 +467,8 @@ def _extract_user_title_slug(entries):
     """
     for entry in entries:
         if entry.get('type') != 'user':
+            continue
+        if entry.get('isMeta') or entry.get('isCompactSummary') or entry.get('isSidechain'):
             continue
 
         content = entry.get('message', {}).get('content', '')
