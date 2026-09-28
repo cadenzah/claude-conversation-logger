@@ -11,7 +11,7 @@ Claude Code already keeps raw JSONL transcripts under `~/.claude/projects/`, but
 ## What it does
 
 - Saves each session as a `.md` file after every Claude response
-- Organizes logs by project name in subdirectories
+- Organizes logs by project in subdirectories — sessions started in a subdirectory or a git worktree are filed under the main repository
 - Filenames include the session start time and a human-readable title for easy browsing
 - Extended thinking (`<details>` blocks) is preserved as collapsible sections
 - Internal system tags are stripped; only the real conversation is kept
@@ -27,6 +27,8 @@ The title in the filename is taken from Claude Code's AI-generated session title
   another-project/
     2026-03-20_17-30-00_308b6c72_initial-project-setup.md
 ```
+
+Folders are named after the project directory. If two different projects share a name (e.g. `~/work/api` and `~/personal/api`), the second one gets a short suffix such as `api-3f9a1c/`. Each folder's `.project-path` file records which project it belongs to.
 
 ## Requirements
 
@@ -136,7 +138,7 @@ You can create a symlink inside your project directory to jump directly to that 
 ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./.claude/conversation-logs
 ```
 
-After this, `.claude/conversation-logs/` in your project will point to all saved sessions for that project. Feel free to change the symlink path to wherever you prefer — only the link location matters, not the name.
+After this, `.claude/conversation-logs/` in your project will point to all saved sessions for that project. (If the folder name got a collision suffix, adjust the target accordingly.) Feel free to change the symlink path to wherever you prefer — only the link location matters, not the name.
 
 > **Note:** Add the symlink to `.gitignore` to avoid committing it. The target path (`~/.claude/conversation-logs/`) is local to each machine, so the link will be broken on other people's environments.
 >

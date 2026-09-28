@@ -11,7 +11,7 @@ Claude Code도 `~/.claude/projects/`에 JSONL 원본 트랜스크립트를 남�
 ## 기능
 
 - Claude 응답마다 세션을 `.md` 파일로 저장
-- 프로젝트 이름별 하위 디렉토리로 정리
+- 프로젝트별 하위 디렉토리로 정리 — 하위 디렉토리나 git worktree에서 시작한 세션도 메인 저장소 폴더로 모음
 - 파일명에 세션 시작 시각과 사람이 읽기 좋은 제목 포함
 - Extended thinking(`<details>` 블록)을 접을 수 있는 섹션으로 보존
 - Claude Code 내부 시스템 태그는 제거하고 실제 대화만 저장
@@ -27,6 +27,8 @@ Claude Code도 `~/.claude/projects/`에 JSONL 원본 트랜스크립트를 남�
   another-project/
     2026-03-20_17-30-00_308b6c72_initial-project-setup.md
 ```
+
+폴더 이름은 프로젝트 디렉토리 이름을 따릅니다. 서로 다른 프로젝트의 이름이 같다면(예: `~/work/api`와 `~/personal/api`) 나중 프로젝트에는 `api-3f9a1c/`처럼 짧은 접미사가 붙습니다. 각 폴더의 `.project-path` 파일에 어느 프로젝트의 폴더인지 기록됩니다.
 
 ## 요구 사항
 
@@ -136,7 +138,7 @@ Stop hook은 `~/.claude/settings.json`의 `"hooks"` 키 아래에 설정합니�
 ln -s ~/.claude/conversation-logs/$(basename "$PWD") ./.claude/conversation-logs
 ```
 
-이후 `.claude/conversation-logs/`가 해당 프로젝트의 모든 저장된 세션을 가리킵니다. 심볼릭 링크의 위치는 원하는 경로로 자유롭게 수정할 수 있습니다 — 링크 이름이나 위치는 무관합니다.
+이후 `.claude/conversation-logs/`가 해당 프로젝트의 모든 저장된 세션을 가리킵니다. (폴더 이름에 충돌 접미사가 붙었다면 대상 경로를 그에 맞게 바꾸세요.) 심볼릭 링크의 위치는 원하는 경로로 자유롭게 수정할 수 있습니다 — 링크 이름이나 위치는 무관합니다.
 
 > **주의:** 심볼릭 링크를 `.gitignore`에 추가해 커밋되지 않도록 하세요. 대상 경로(`~/.claude/conversation-logs/`)는 로컬 환경에 종속되므로, 다른 사람의 환경에서는 링크가 깨집니다.
 >

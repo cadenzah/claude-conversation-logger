@@ -13,8 +13,10 @@ Environment variables:
 """
 
 import difflib
+import hashlib
 import json
 import re
+import subprocess
 import sys
 import os
 import time
@@ -184,7 +186,7 @@ def load_entries(transcript_path):
     return entries
 
 
-def entries_to_markdown(entries, session_id, cwd, last_assistant_message=None):
+def entries_to_markdown(entries, session_id, cwd, project_root=None, last_assistant_message=None):
     """Render transcript entries as a Markdown string.
 
     ``last_assistant_message`` comes from the Stop hook input. The transcript is
@@ -209,13 +211,16 @@ def entries_to_markdown(entries, session_id, cwd, last_assistant_message=None):
     if pending_reply:
         last_ts = datetime.now().astimezone().isoformat()
         message_count += 1
-    project_name = os.path.basename(cwd) if cwd else 'unknown'
+    project_root = project_root or cwd
+    project_name = os.path.basename(project_root) if project_root else 'unknown'
 
     md = []
     md.append('# Conversation Log')
     md.append('')
     md.append(f'- **Session ID**: `{session_id}`')
-    md.append(f'- **Project**: `{project_name}` (`{cwd}`)')
+    md.append(f'- **Project**: `{project_name}` (`{project_root}`)')
+    if cwd and cwd != project_root:
+        md.append(f'- **Working directory**: `{cwd}`')
     md.append(f'- **Started**: {format_timestamp(first_ts)}')
     md.append(f'- **Last updated**: {format_timestamp(last_ts)}')
     md.append(f'- **Messages**: {message_count}')
@@ -446,6 +451,86 @@ def _wait_for_stable_transcript(transcript_path, interval=0.2, max_wait=3):
         time.sleep(interval)
 
 
+def get_session_cwd(entries, fallback):
+    """Return the directory the session started in.
+
+    Using the first recorded cwd (not the hook's current cwd) keeps a session
+    in one log folder even if the working directory changes mid-session.
+    """
+    for entry in entries:
+        if entry.get('type') in ('user', 'assistant') and entry.get('cwd'):
+            return entry['cwd']
+    return fallback
+
+
+def resolve_project_root(path):
+    """Map a directory to its project root.
+
+    Subdirectories and git worktrees resolve to the main repository root, so
+    all sessions of one repo share a folder. Non-git directories map to
+    themselves.
+    """
+    if not path:
+        return path
+    try:
+        out = subprocess.run(
+            ['git', '-C', path, 'rev-parse', '--git-common-dir', '--show-toplevel'],
+            capture_output=True, text=True, timeout=3,
+        )
+    except Exception:
+        return path
+    lines = out.stdout.strip().splitlines()
+    if out.returncode != 0 or len(lines) < 2:
+        return path
+    # realpath so symlinked routes (e.g. /tmp vs /private/tmp) agree
+    common_dir = os.path.realpath(os.path.join(path, lines[0]))
+    if os.path.basename(common_dir) == '.git':
+        # Main checkout or a linked worktree: the repo root owns .git
+        return os.path.dirname(common_dir)
+    return os.path.realpath(lines[1])
+
+
+PROJECT_MARKER = '.project-path'
+
+
+def _claim_logs_dir(logs_dir, project_root):
+    """Return True if ``logs_dir`` belongs to ``project_root`` (claiming it if unowned)."""
+    marker = os.path.join(logs_dir, PROJECT_MARKER)
+    try:
+        with open(marker, 'r', encoding='utf-8') as f:
+            return f.read().strip() == project_root
+    except FileNotFoundError:
+        pass
+    except Exception:
+        return True
+    # Unowned: a new folder, or one created before markers existed.
+    os.makedirs(logs_dir, mode=0o700, exist_ok=True)
+    try:
+        with open(marker, 'w', encoding='utf-8') as f:
+            f.write(project_root + '\n')
+    except Exception:
+        pass
+    return True
+
+
+def resolve_logs_dir(base_dir, project_root):
+    """Pick the log folder for a project, avoiding basename collisions.
+
+    The first project to use ``<name>/`` owns it; a different project with the
+    same basename gets ``<name>-<hash>/``.
+    """
+    if not project_root:
+        return os.path.join(base_dir, 'unknown')
+    name = os.path.basename(project_root.rstrip(os.sep)) or 'root'
+    logs_dir = os.path.join(base_dir, name)
+    if _claim_logs_dir(logs_dir, project_root):
+        return logs_dir
+    suffix = hashlib.sha1(project_root.encode('utf-8')).hexdigest()[:6]
+    logs_dir = os.path.join(base_dir, f'{name}-{suffix}')
+    _claim_logs_dir(logs_dir, project_root)
+    return logs_dir
+
+
 def main():
     try:
         hook_data = json.loads(sys.stdin.read())
@@ -466,16 +551,19 @@ def main():
     except Exception:
         sys.exit(0)
 
+    session_cwd = get_session_cwd(entries, cwd)
+    project_root = resolve_project_root(session_cwd)
+
     markdown, error = entries_to_markdown(
-        entries, session_id, cwd,
+        entries, session_id, session_cwd,
+        project_root=project_root,
         last_assistant_message=hook_data.get('last_assistant_message'),
     )
     if error or not markdown:
         sys.exit(0)
 
-    project_name = os.path.basename(cwd) if cwd else 'unknown'
-    logs_dir = os.path.join(
-        os.path.expanduser('~/.claude/conversation-logs'), project_name
+    logs_dir = resolve_logs_dir(
+        os.path.expanduser('~/.claude/conversation-logs'), project_root
     )
     os.makedirs(logs_dir, mode=0o700, exist_ok=True)
 
