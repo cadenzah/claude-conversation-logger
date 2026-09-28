@@ -1,0 +1,15 @@
+{
+  "name": "cadenzah-plugins",
+  "description": "Claude Code plugins by Cadenzah",
+  "owner": {
+    "name": "Cadenzah",
+    "url": "https://github.com/cadenzah"
+  },
+  "plugins": [
+    {
+      "name": "conversation-logger",
+      "source": "./",
+      "description": "Automatically saves every Claude Code session as a human-readable Markdown file."
+    }
+  ]
+}

@@ -4,7 +4,9 @@
 
 A Claude Code plugin that automatically saves every session as a human-readable Markdown file.
 
-Every time Claude finishes responding, the current session is written to disk — so nothing is lost to context compression, and you can review past conversations any time.
+Every time Claude finishes responding, the current session is written to disk as Markdown you can read, grep, or drop into a notes app like Obsidian.
+
+Claude Code already keeps raw JSONL transcripts under `~/.claude/projects/`, but they are hard to read and are deleted after `cleanupPeriodDays` (30 days by default). This plugin keeps a readable, permanent copy — automatically, with no `/export` needed.
 
 ## What it does
 
@@ -33,45 +35,42 @@ The title in the filename is taken from Claude Code's AI-generated session title
 
 ## Installation
 
-**1. Run the install script:**
+Inside a Claude Code session, run:
+
+```
+/plugin marketplace add cadenzah/claude-conversation-logger
+/plugin install conversation-logger@cadenzah-plugins
+```
+
+Or from your shell:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
+claude plugin marketplace add cadenzah/claude-conversation-logger
+claude plugin install conversation-logger@cadenzah-plugins
 ```
 
-This clones the repository to `~/.claude/plugins/conversation-logger`. Running the same command again will update the plugin to the latest version.
-
-**2. Add the Stop hook** to your `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/plugins/conversation-logger/hooks/save-conversation-log.py",
-            "timeout": 15
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-If you already have other hooks under `Stop`, add this entry to the existing array.
-
-The plugin activates on the next Claude Code session.
+The hook is registered automatically (no `settings.json` editing) and runs in the background, so it never delays Claude's responses. The plugin activates on the next session, or immediately after `/reload-plugins`.
 
 ## Updating
 
-Run the same install script to pull the latest changes:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
 ```
+/plugin marketplace update cadenzah-plugins
+```
+
+To receive updates automatically, open `/plugin` → **Marketplaces** → `cadenzah-plugins` → **Enable auto-update**.
+
+## Migrating from the old install script
+
+Earlier versions were installed by cloning into `~/.claude/plugins/conversation-logger` and adding a `Stop` hook to `~/.claude/settings.json` by hand. If you installed that way, remove the old setup **before** installing the plugin, otherwise every session will be logged twice:
+
+1. Delete the `Stop` hook entry whose command is `python3 ~/.claude/plugins/conversation-logger/hooks/save-conversation-log.py` from `~/.claude/settings.json`.
+2. Remove the old clone:
+   ```bash
+   rm -rf ~/.claude/plugins/conversation-logger
+   ```
+3. Install via `/plugin` as shown above.
+
+Existing logs in `~/.claude/conversation-logs/` are kept and keep being updated.
 
 ## Log format
 

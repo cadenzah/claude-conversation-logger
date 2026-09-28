@@ -4,7 +4,9 @@
 
 Claude Code 세션을 자동으로 읽기 좋은 마크다운 파일로 저장하는 플러그인입니다.
 
-Claude가 응답을 완료할 때마다 현재 세션이 디스크에 기록됩니다. 컨텍스트 압축으로 인한 대화 유실 없이, 언제든 과거 대화를 다시 확인할 수 있습니다.
+Claude가 응답을 완료할 때마다 현재 세션이 마크다운으로 디스크에 기록됩니다. 그대로 읽거나, grep으로 검색하거나, Obsidian 같은 노트 앱에서 열어볼 수 있습니다.
+
+Claude Code도 `~/.claude/projects/`에 JSONL 원본 트랜스크립트를 남기지만, 사람이 읽기 어렵고 `cleanupPeriodDays`(기본 30일)가 지나면 삭제됩니다. 이 플러그인은 `/export` 없이도 읽기 좋은 사본을 자동으로, 영구히 보관합니다.
 
 ## 기능
 
@@ -33,45 +35,42 @@ Claude가 응답을 완료할 때마다 현재 세션이 디스크에 기록됩�
 
 ## 설치
 
-**1. 설치 스크립트 실행:**
+Claude Code 세션 안에서 실행합니다:
+
+```
+/plugin marketplace add cadenzah/claude-conversation-logger
+/plugin install conversation-logger@cadenzah-plugins
+```
+
+셸에서 실행할 수도 있습니다:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
+claude plugin marketplace add cadenzah/claude-conversation-logger
+claude plugin install conversation-logger@cadenzah-plugins
 ```
 
-저장소가 `~/.claude/plugins/conversation-logger`에 클론됩니다. 같은 명령을 다시 실행하면 플러그인이 최신 버전으로 업데이트됩니다.
-
-**2. Stop hook 등록** — `~/.claude/settings.json`에 아래 내용을 추가합니다:
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/plugins/conversation-logger/hooks/save-conversation-log.py",
-            "timeout": 15
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-`Stop` 하위에 이미 다른 훅이 있다면 해당 배열에 항목을 추가하면 됩니다.
-
-다음 Claude Code 세션부터 플러그인이 동작합니다.
+훅은 자동으로 등록되며(`settings.json` 수정 불필요) 백그라운드에서 실행되므로 Claude의 응답을 지연시키지 않습니다. 다음 세션부터, 또는 `/reload-plugins` 직후부터 동작합니다.
 
 ## 업데이트
 
-동일한 설치 스크립트를 다시 실행하면 최신 변경사항을 반영합니다:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/cadenzah/claude-conversation-logger/main/install.sh)
 ```
+/plugin marketplace update cadenzah-plugins
+```
+
+자동으로 업데이트를 받으려면 `/plugin` → **Marketplaces** → `cadenzah-plugins` → **Enable auto-update**를 선택하세요.
+
+## 기존 설치 스크립트에서 이전하기
+
+이전 버전은 `~/.claude/plugins/conversation-logger`에 저장소를 클론하고 `~/.claude/settings.json`에 `Stop` 훅을 직접 추가하는 방식이었습니다. 이 방식으로 설치했다면 플러그인을 설치하기 **전에** 기존 설정을 제거하세요. 그렇지 않으면 모든 세션이 두 번 기록됩니다:
+
+1. `~/.claude/settings.json`에서 command가 `python3 ~/.claude/plugins/conversation-logger/hooks/save-conversation-log.py`인 `Stop` 훅 항목을 삭제합니다.
+2. 기존 클론을 삭제합니다:
+   ```bash
+   rm -rf ~/.claude/plugins/conversation-logger
+   ```
+3. 위의 `/plugin` 방식으로 설치합니다.
+
+`~/.claude/conversation-logs/`에 있는 기존 로그는 그대로 유지되며 계속 갱신됩니다.
 
 ## 로그 형식
 
