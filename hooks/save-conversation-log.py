@@ -85,32 +85,46 @@ def format_timestamp(ts_str):
         return ts_str
 
 
-def jsonl_to_markdown(transcript_path, session_id, cwd):
-    """Parse a JSONL transcript and return a Markdown string.
+def load_entries(transcript_path):
+    """Read a JSONL transcript into a list of entries, skipping malformed lines."""
+    entries = []
+    with open(transcript_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    return entries
+
+
+def entries_to_markdown(entries, session_id, cwd, last_assistant_message=None):
+    """Render transcript entries as a Markdown string.
+
+    ``last_assistant_message`` comes from the Stop hook input. The transcript is
+    written asynchronously and may not contain the final reply yet; if so, the
+    reply is appended so the log is never missing the last turn.
 
     Returns:
         (markdown: str | None, error: str | None)
     """
-    entries = []
-    try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
-    except Exception as e:
-        return None, str(e)
-
     messages = [e for e in entries if e.get('type') in ('user', 'assistant')]
     if not messages:
         return None, 'no messages'
 
+    pending_reply = None
+    if last_assistant_message and last_assistant_message.strip():
+        if not _reply_in_current_turn(messages, last_assistant_message):
+            pending_reply = last_assistant_message.strip()
+
     first_ts = messages[0].get('timestamp', '')
     last_ts = messages[-1].get('timestamp', '')
+    message_count = len(messages)
+    if pending_reply:
+        last_ts = datetime.now().astimezone().isoformat()
+        message_count += 1
     project_name = os.path.basename(cwd) if cwd else 'unknown'
 
     md = []
@@ -120,7 +134,7 @@ def jsonl_to_markdown(transcript_path, session_id, cwd):
     md.append(f'- **Project**: `{project_name}` (`{cwd}`)')
     md.append(f'- **Started**: {format_timestamp(first_ts)}')
     md.append(f'- **Last updated**: {format_timestamp(last_ts)}')
-    md.append(f'- **Messages**: {len(messages)}')
+    md.append(f'- **Messages**: {message_count}')
     md.append('')
     md.append('---')
     md.append('')
@@ -132,12 +146,7 @@ def jsonl_to_markdown(transcript_path, session_id, cwd):
         thinking, text = extract_content(content)
 
         if role == 'user':
-            is_tool_result_only = (
-                isinstance(content, list) and len(content) > 0 and
-                all(isinstance(i, dict) and i.get('type') == 'tool_result'
-                    for i in content if isinstance(i, dict))
-            )
-            if is_tool_result_only:
+            if _is_tool_result_only(content):
                 if not text.strip():
                     continue
                 md.append(f'## Tool Output `{timestamp}`')
@@ -172,25 +181,58 @@ def jsonl_to_markdown(transcript_path, session_id, cwd):
                 md.append(text.strip())
             md.append('')
 
+    if pending_reply:
+        md.append(f'## Claude `{format_timestamp(last_ts)}`')
+        md.append('')
+        md.append(pending_reply)
+        md.append('')
+
     return '\n'.join(md), None
 
 
-def get_date_prefix(transcript_path):
-    """Read the first user/assistant timestamp from the transcript."""
-    try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                entry = json.loads(line)
-                if entry.get('type') in ('user', 'assistant') and entry.get('timestamp'):
-                    dt = datetime.fromisoformat(
-                        entry['timestamp'].replace('Z', '+00:00')
-                    ).astimezone()
-                    return dt.strftime('%Y-%m-%d_%H-%M-%S')
-    except Exception:
-        pass
+def _is_tool_result_only(content):
+    return (
+        isinstance(content, list) and len(content) > 0 and
+        all(isinstance(i, dict) and i.get('type') == 'tool_result'
+            for i in content if isinstance(i, dict))
+    )
+
+
+def _reply_in_current_turn(messages, reply):
+    """Return True if ``reply`` already appears in the transcript's latest turn.
+
+    The latest turn is everything after the last real user prompt (tool results
+    don't count). Whitespace is normalized so block-joining differences don't
+    cause a duplicate.
+    """
+    def norm(s):
+        return ' '.join(s.split())
+
+    target = norm(reply)
+    texts = []
+    for msg in reversed(messages):
+        content = msg.get('message', {}).get('content', '')
+        if msg.get('type') == 'user' and not _is_tool_result_only(content):
+            break
+        if msg.get('type') == 'assistant' and isinstance(content, list):
+            texts.extend(
+                item.get('text', '') for item in content
+                if isinstance(item, dict) and item.get('type') == 'text'
+            )
+    return target in norm('\n'.join(reversed(texts)))
+
+
+def get_date_prefix(entries):
+    """Return the first user/assistant timestamp formatted for a filename."""
+    for entry in entries:
+        if entry.get('type') in ('user', 'assistant') and entry.get('timestamp'):
+            try:
+                dt = datetime.fromisoformat(
+                    entry['timestamp'].replace('Z', '+00:00')
+                ).astimezone()
+                return dt.strftime('%Y-%m-%d_%H-%M-%S')
+            except Exception:
+                break
     return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 
@@ -239,7 +281,7 @@ _SKIP_PREFIXES = (
 )
 
 
-def _extract_user_title_slug(transcript_path):
+def _extract_user_title_slug(entries):
     """Scan user messages and return the first meaningful one as a slug.
 
     - Skips messages that are purely tool results.
@@ -247,57 +289,41 @@ def _extract_user_title_slug(transcript_path):
       skipping items that start with XML-like system tags.
     - Skips known auto-injected context strings.
     """
-    try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+    for entry in entries:
+        if entry.get('type') != 'user':
+            continue
 
-                if entry.get('type') != 'user':
-                    continue
+        content = entry.get('message', {}).get('content', '')
 
-                content = entry.get('message', {}).get('content', '')
+        if isinstance(content, str):
+            candidates = [content.strip()]
+        elif isinstance(content, list):
+            if _is_tool_result_only(content):
+                continue
+            # Gather all text items in order
+            candidates = [
+                item.get('text', '').strip()
+                for item in content
+                if isinstance(item, dict) and item.get('type') == 'text'
+                and item.get('text', '').strip()
+            ]
+        else:
+            continue
 
-                if isinstance(content, str):
-                    candidates = [content.strip()]
-                elif isinstance(content, list):
-                    # Skip messages that are purely tool results
-                    if all(
-                        isinstance(i, dict) and i.get('type') == 'tool_result'
-                        for i in content if isinstance(i, dict)
-                    ):
-                        continue
-                    # Gather all text items in order
-                    candidates = [
-                        item.get('text', '').strip()
-                        for item in content
-                        if isinstance(item, dict) and item.get('type') == 'text'
-                        and item.get('text', '').strip()
-                    ]
-                else:
-                    continue
-
-                for text in candidates:
-                    # Skip XML-block injections (ide_opened_file, task-notification, …)
-                    if text.startswith('<'):
-                        continue
-                    # Skip known auto-injected context strings
-                    if text.lower().startswith(_SKIP_PREFIXES):
-                        continue
-                    slug = _make_title_slug(text, max_length=50)
-                    if slug:
-                        return slug
-    except Exception:
-        pass
+        for text in candidates:
+            # Skip XML-block injections (ide_opened_file, task-notification, …)
+            if text.startswith('<'):
+                continue
+            # Skip known auto-injected context strings
+            if text.lower().startswith(_SKIP_PREFIXES):
+                continue
+            slug = _make_title_slug(text, max_length=50)
+            if slug:
+                return slug
     return None
 
 
-def get_title_slug(transcript_path):
+def get_title_slug(entries):
     """Return a filename-safe slug representing the session topic.
 
     Strategy (in priority order):
@@ -305,42 +331,34 @@ def get_title_slug(transcript_path):
        Present in recent versions; most accurate and concise.
     2. First meaningful user message – fallback for older sessions.
     """
-    try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if entry.get('type') == 'ai-title':
-                    title = entry.get('aiTitle', '').strip()
-                    if title:
-                        # ai-title is already a concise phrase generated by Claude Code;
-                        # use a high ceiling so it is never truncated in practice.
-                        return _make_title_slug(title, max_length=120)
-    except Exception:
-        pass
+    for entry in entries:
+        if entry.get('type') == 'ai-title':
+            title = (entry.get('aiTitle') or '').strip()
+            if title:
+                # ai-title is already a concise phrase generated by Claude Code;
+                # use a high ceiling so it is never truncated in practice.
+                return _make_title_slug(title, max_length=120)
 
-    return _extract_user_title_slug(transcript_path)
+    return _extract_user_title_slug(entries)
 
 
-def _wait_for_stable_transcript(transcript_path, stable_secs=1, max_wait=10):
-    """Wait until the transcript file size stops changing."""
-    prev_size = -1
-    waited = 0
-    while waited < max_wait:
+def _wait_for_stable_transcript(transcript_path, interval=0.2, max_wait=3):
+    """Wait briefly until the transcript file size stops changing.
+
+    The transcript is flushed asynchronously, so give pending writes a moment
+    to land. Returns after two consecutive equal readings or ``max_wait``.
+    """
+    deadline = time.monotonic() + max_wait
+    prev_size = None
+    while True:
         try:
             size = os.path.getsize(transcript_path)
-        except Exception:
+        except OSError:
             return
-        if size == prev_size:
+        if size == prev_size or time.monotonic() >= deadline:
             return
         prev_size = size
-        time.sleep(stable_secs)
-        waited += stable_secs
+        time.sleep(interval)
 
 
 def main():
@@ -358,17 +376,29 @@ def main():
 
     _wait_for_stable_transcript(transcript_path)
 
+    try:
+        entries = load_entries(transcript_path)
+    except Exception:
+        sys.exit(0)
+
+    markdown, error = entries_to_markdown(
+        entries, session_id, cwd,
+        last_assistant_message=hook_data.get('last_assistant_message'),
+    )
+    if error or not markdown:
+        sys.exit(0)
+
     project_name = os.path.basename(cwd) if cwd else 'unknown'
     logs_dir = os.path.join(
         os.path.expanduser('~/.claude/conversation-logs'), project_name
     )
     os.makedirs(logs_dir, exist_ok=True)
 
-    date_prefix = get_date_prefix(transcript_path)
+    date_prefix = get_date_prefix(entries)
     session_short = session_id[:8] if len(session_id) >= 8 else session_id
 
     # Derive a human-readable title from the first user message
-    title_slug = get_title_slug(transcript_path)
+    title_slug = get_title_slug(entries)
     new_filename = (
         f'{date_prefix}_{session_short}_{title_slug}.md'
         if title_slug
@@ -385,10 +415,6 @@ def main():
                 os.remove(os.path.join(logs_dir, existing))
             except Exception:
                 pass
-
-    markdown, error = jsonl_to_markdown(transcript_path, session_id, cwd)
-    if error or not markdown:
-        sys.exit(0)
 
     try:
         with open(log_path, 'w', encoding='utf-8') as f:

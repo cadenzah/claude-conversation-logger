@@ -7,7 +7,8 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/save-conversation-log.py",
-            "timeout": 15
+            "timeout": 15,
+            "async": true
           }
         ]
       }
