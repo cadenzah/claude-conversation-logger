@@ -58,6 +58,38 @@ def redact_secrets(text):
     return text
 
 
+# Context Claude Code injects into user messages. Only these are removed, so any
+# HTML/XML the user actually typed or pasted is preserved.
+_INJECTED_TAG_RE = re.compile(
+    r'<(system-reminder|ide_[a-z_]+|local-command-caveat)\b[^>]*>.*?</\1>\s*', re.DOTALL
+)
+_COMMAND_TAGS_RE = re.compile(
+    r'(?:<command-message>.*?</command-message>\s*)?'
+    r'<command-name>(.*?)</command-name>'
+    r'(?:\s*<command-args>(.*?)</command-args>)?',
+    re.DOTALL,
+)
+
+
+def _format_slash_command(match):
+    name = match.group(1).strip()
+    if not name.startswith('/'):
+        name = '/' + name
+    args = (match.group(2) or '').strip()
+    if not args:
+        return f'`{name}`'
+    if '\n' in args:
+        return f'`{name}`\n\n{args}'
+    return f'`{name} {args}`'
+
+
+def clean_user_text(text):
+    """Remove injected context tags and render slash-command tags readably."""
+    text = _INJECTED_TAG_RE.sub('', text)
+    text = _COMMAND_TAGS_RE.sub(_format_slash_command, text)
+    return text.strip()
+
+
 def format_tool_output(text):
     """Apply CONVERSATION_LOGGER_TOOL_OUTPUT to a tool result."""
     if TOOL_OUTPUT_MODE == 'none':
@@ -206,10 +238,8 @@ def entries_to_markdown(entries, session_id, cwd, last_assistant_message=None):
                 md.append(text.strip())
                 md.append('')
             else:
-                # Strip internal system tags injected by Claude Code
-                if '<system-reminder>' in text or '<ide_' in text:
-                    text = re.sub(r'<[^>]+>.*?</[^>]+>', '', text, flags=re.DOTALL).strip()
-                if not text.strip():
+                text = clean_user_text(text)
+                if not text:
                     continue
                 md.append(f'## User `{timestamp}`')
                 md.append('')
