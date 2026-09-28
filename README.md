@@ -103,6 +103,31 @@ The user is asking about Stop hooks...
 Stop hooks are configured in `~/.claude/settings.json` under the `"hooks"` key...
 ```
 
+## Privacy and configuration
+
+> **Logs are plain-text copies of everything in the session**, including file contents Claude read and command output. Unlike Claude Code's own transcripts, they are never cleaned up automatically. Don't sync `~/.claude/conversation-logs/` to shared or public locations.
+
+To reduce the risk:
+
+- **Secret redaction (on by default)**: values that look like API keys, tokens (GitHub, Anthropic, OpenAI, AWS, Slack, Google, JWTs), private keys, `Authorization` headers, passwords in URLs, and `.env`-style `*_TOKEN=` / `*_PASSWORD=` / `*_API_KEY=` assignments are replaced with `[REDACTED]`. This is pattern-based and best-effort — it will not catch everything.
+- **Tool output control**: tool results (file reads, command output) are usually the largest and most sensitive part of a log.
+- Log files are created with owner-only permissions (`600`).
+
+Set these in the `env` section of `~/.claude/settings.json`:
+
+| Variable | Values | Default |
+| --- | --- | --- |
+| `CONVERSATION_LOGGER_TOOL_OUTPUT` | `full` — keep everything<br>`truncate` — first 2,000 characters of each result<br>`none` — omit tool results entirely | `full` |
+| `CONVERSATION_LOGGER_REDACT` | `1` — mask secret-looking values<br>`0` — disable redaction | `1` |
+
+```json
+{
+  "env": {
+    "CONVERSATION_LOGGER_TOOL_OUTPUT": "truncate"
+  }
+}
+```
+
 ## Quick access to logs from your project
 
 You can create a symlink inside your project directory to jump directly to that project's conversation logs:

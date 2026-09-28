@@ -103,6 +103,31 @@ Stop hook은 어떻게 설정하나요?
 Stop hook은 `~/.claude/settings.json`의 `"hooks"` 키 아래에 설정합니다...
 ```
 
+## 개인정보 보호와 설정
+
+> **로그는 세션 전체의 평문 사본입니다.** Claude가 읽은 파일 내용과 명령 실행 결과도 포함됩니다. Claude Code 자체 트랜스크립트와 달리 자동으로 삭제되지 않으므로, `~/.claude/conversation-logs/`를 공유 폴더나 공개된 위치에 동기화하지 마세요.
+
+위험을 줄이기 위해 다음 기능을 제공합니다:
+
+- **민감정보 마스킹 (기본 활성화)**: API 키·토큰(GitHub, Anthropic, OpenAI, AWS, Slack, Google, JWT), 개인 키, `Authorization` 헤더, URL에 포함된 비밀번호, `.env` 형식의 `*_TOKEN=` / `*_PASSWORD=` / `*_API_KEY=` 값을 `[REDACTED]`로 치환합니다. 패턴 기반의 최선 노력 방식이므로 모든 경우를 잡아내지는 못합니다.
+- **도구 출력 제어**: 도구 실행 결과(파일 읽기, 명령 출력)는 보통 로그에서 가장 크고 민감한 부분입니다.
+- 로그 파일은 소유자만 읽을 수 있는 권한(`600`)으로 생성됩니다.
+
+`~/.claude/settings.json`의 `env` 항목에 설정합니다:
+
+| 변수 | 값 | 기본값 |
+| --- | --- | --- |
+| `CONVERSATION_LOGGER_TOOL_OUTPUT` | `full` — 모두 저장<br>`truncate` — 결과마다 앞 2,000자만 저장<br>`none` — 도구 결과 저장 안 함 | `full` |
+| `CONVERSATION_LOGGER_REDACT` | `1` — 민감정보로 보이는 값 마스킹<br>`0` — 마스킹 끄기 | `1` |
+
+```json
+{
+  "env": {
+    "CONVERSATION_LOGGER_TOOL_OUTPUT": "truncate"
+  }
+}
+```
+
 ## 프로젝트에서 로그에 빠르게 접근하기
 
 프로젝트 디렉토리 안에 심볼릭 링크를 만들면 해당 프로젝트의 대화 로그에 바로 접근할 수 있습니다:

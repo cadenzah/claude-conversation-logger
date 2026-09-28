@@ -6,6 +6,10 @@ Triggered automatically after every Claude response.
 Logs are written to: ~/.claude/conversation-logs/{project-name}/{YYYY-MM-DD_HH-MM-SS}_{session}_{title}.md
 Each session maps to one file; the file is overwritten on every trigger to keep it up to date.
 The title is derived from the first meaningful user message in the conversation.
+
+Environment variables:
+    CONVERSATION_LOGGER_TOOL_OUTPUT  full (default) | truncate | none
+    CONVERSATION_LOGGER_REDACT       1 (default) masks secret-looking values; 0 disables
 """
 
 import difflib
@@ -15,6 +19,53 @@ import sys
 import os
 import time
 from datetime import datetime
+
+
+TOOL_OUTPUT_MODE = os.environ.get('CONVERSATION_LOGGER_TOOL_OUTPUT', 'full').strip().lower()
+REDACT_ENABLED = os.environ.get('CONVERSATION_LOGGER_REDACT', '1').strip() != '0'
+TOOL_OUTPUT_TRUNCATE_CHARS = 2000
+
+REDACTED = '[REDACTED]'
+
+# (pattern, replacement). Replacements keep any non-secret prefix (key names,
+# "Bearer ") so the log stays readable.
+_SECRET_PATTERNS = [
+    (re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', re.DOTALL),
+     '-----BEGIN PRIVATE KEY-----\n' + REDACTED + '\n-----END PRIVATE KEY-----'),
+    (re.compile(r'\bsk-ant-[A-Za-z0-9_\-]{20,}'), REDACTED),
+    (re.compile(r'\bsk-(?:proj-)?[A-Za-z0-9_\-]{32,}'), REDACTED),
+    (re.compile(r'\bgh[pousr]_[A-Za-z0-9]{36,}'), REDACTED),
+    (re.compile(r'\bgithub_pat_[A-Za-z0-9_]{40,}'), REDACTED),
+    (re.compile(r'\bglpat-[A-Za-z0-9_\-]{20,}'), REDACTED),
+    (re.compile(r'\b(?:AKIA|ASIA)[0-9A-Z]{16}\b'), REDACTED),
+    (re.compile(r'\bxox[abprs]-[A-Za-z0-9\-]{10,}'), REDACTED),
+    (re.compile(r'\bAIza[0-9A-Za-z_\-]{35}\b'), REDACTED),
+    (re.compile(r'\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}'), REDACTED),
+    (re.compile(r'(?i)(\bauthorization["\']?\s*[:=]\s*["\']?(?:bearer|basic|token)\s+)[A-Za-z0-9._~+/=\-]{8,}'),
+     r'\1' + REDACTED),
+    # dotenv-style assignments at line start: API_KEY=..., export DB_PASSWORD="..."
+    (re.compile(r'(?m)^(\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|SECRET_KEY|TOKEN|PASSWORD|PASSWD|API_?KEY|PRIVATE_KEY|ACCESS_KEY|CREDENTIALS?)=)(["\']?)[^\s"\']{4,}\2'),
+     r'\1\2' + REDACTED + r'\2'),
+    # URLs with inline credentials: scheme://user:password@host
+    (re.compile(r'([a-z][a-z0-9+.\-]*://[^\s:/@]+:)[^\s@/]{3,}(@)'), r'\1' + REDACTED + r'\2'),
+]
+
+
+def redact_secrets(text):
+    """Mask values that look like credentials."""
+    for pattern, replacement in _SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def format_tool_output(text):
+    """Apply CONVERSATION_LOGGER_TOOL_OUTPUT to a tool result."""
+    if TOOL_OUTPUT_MODE == 'none':
+        return ''
+    if TOOL_OUTPUT_MODE == 'truncate' and len(text) > TOOL_OUTPUT_TRUNCATE_CHARS:
+        omitted = len(text) - TOOL_OUTPUT_TRUNCATE_CHARS
+        return f'{text[:TOOL_OUTPUT_TRUNCATE_CHARS]}\n… ({omitted} more characters truncated)'
+    return text
 
 
 def extract_content(content):
@@ -68,6 +119,7 @@ def extract_content(content):
                 )
             else:
                 result_text = str(result_content) if result_content else ''
+            result_text = format_tool_output(result_text)
             if result_text.strip():
                 text_parts.append(result_text)
 
@@ -187,7 +239,10 @@ def entries_to_markdown(entries, session_id, cwd, last_assistant_message=None):
         md.append(pending_reply)
         md.append('')
 
-    return '\n'.join(md), None
+    markdown = '\n'.join(md)
+    if REDACT_ENABLED:
+        markdown = redact_secrets(markdown)
+    return markdown, None
 
 
 def _is_tool_result_only(content):
@@ -392,7 +447,7 @@ def main():
     logs_dir = os.path.join(
         os.path.expanduser('~/.claude/conversation-logs'), project_name
     )
-    os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(logs_dir, mode=0o700, exist_ok=True)
 
     date_prefix = get_date_prefix(entries)
     session_short = session_id[:8] if len(session_id) >= 8 else session_id
@@ -417,7 +472,9 @@ def main():
                 pass
 
     try:
-        with open(log_path, 'w', encoding='utf-8') as f:
+        # Logs can contain source code and command output; keep them owner-only.
+        fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             f.write(markdown)
     except Exception:
         pass
